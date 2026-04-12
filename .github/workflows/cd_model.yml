@@ -1,13 +1,6 @@
 name: CD — Model Training Pipeline
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - "src/models/**"
-      - "src/features/**"
-      - "infra/sagemaker_pipelines/**"
-
   workflow_dispatch:
     inputs:
       model_version:
