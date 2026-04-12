@@ -79,7 +79,7 @@ _state_table = _dynamodb.Table(os.environ["PATIENT_STATE_TABLE"])
 # Configuration
 # ---------------------------------------------------------------------------
 SAGEMAKER_ENDPOINT = os.environ["SAGEMAKER_ENDPOINT_NAME"]
-ANOMALY_ALERT_THRESHOLD = float(os.environ.get("ANOMALY_ALERT_THRESHOLD", "0.85"))
+ANOMALY_ALERT_THRESHOLD = float(os.environ.get("ANOMALY_ALERT_THRESHOLD", "0.80"))
 ECG_SAMPLE_RATE_HZ = int(os.environ.get("ECG_SAMPLE_RATE_HZ", "500"))
 WINDOW_SECONDS = int(os.environ.get("WINDOW_SECONDS", "5"))
 WINDOW_SAMPLES = ECG_SAMPLE_RATE_HZ * WINDOW_SECONDS
@@ -282,7 +282,7 @@ def persist_result(result: AnomalyResult) -> None:
     at-least-once, so the same record may be processed more than once on retry.
     A duplicate write is silently ignored; it does not re-fire an alert.
     """
-    ttl_epoch = int(time.time()) + (72 * 3600)
+    ttl_epoch = int(time.time()) + (48 * 3600)
 
     try:
         _state_table.put_item(
