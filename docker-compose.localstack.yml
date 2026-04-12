@@ -1,0 +1,28 @@
+version: "3.8"
+
+# Starts localstack for local development and integration testing.
+# Services emulated: Kinesis, DynamoDB, S3, SageMaker (basic stubs).
+#
+# Usage:
+#   docker compose -f docker-compose.localstack.yml up -d
+#   docker compose -f docker-compose.localstack.yml down
+
+services:
+  localstack:
+    image: localstack/localstack:3.3
+    ports:
+      - "4566:4566"       # unified endpoint
+      - "4510-4559:4510-4559"
+    environment:
+      - SERVICES=kinesis,dynamodb,s3,sqs,kms,iot,logs
+      - DEBUG=0
+      - PERSISTENCE=1
+      - KINESIS_PROVIDER=kinesalite
+      - AWS_DEFAULT_REGION=us-east-1
+      - LOCALSTACK_AUTH_TOKEN=${LOCALSTACK_AUTH_TOKEN:-}
+    volumes:
+      - localstack_data:/var/lib/localstack
+      - /var/run/docker.sock:/var/run/docker.sock
+
+volumes:
+  localstack_data:

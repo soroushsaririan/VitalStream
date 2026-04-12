@@ -1,0 +1,62 @@
+name: CD — Model Training Pipeline
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "src/models/**"
+      - "src/features/**"
+      - "infra/sagemaker_pipelines/**"
+
+  workflow_dispatch:
+    inputs:
+      model_version:
+        description: "Semantic version for this model run (e.g. 1.2.0)"
+        required: true
+        default: "0.0.1"
+      epochs:
+        description: "Number of training epochs"
+        required: false
+        default: "30"
+
+jobs:
+  trigger-sagemaker-pipeline:
+    name: Trigger SageMaker Training Pipeline
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write   # OIDC for AWS role assumption — no long-lived keys in secrets
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_SAGEMAKER_PIPELINE_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install SageMaker SDK
+        run: pip install "sagemaker>=2.214" boto3
+
+      - name: Upsert and run SageMaker pipeline
+        env:
+          SAGEMAKER_ROLE_ARN: ${{ secrets.SAGEMAKER_ROLE_ARN }}
+          MODEL_VERSION:      ${{ github.event.inputs.model_version || github.sha }}
+          EPOCHS:             ${{ github.event.inputs.epochs || '30' }}
+        run: |
+          python infra/sagemaker_pipelines/training_pipeline.py \
+            --run \
+            --wait
+
+      - name: Notify on pipeline failure
+        if: failure()
+        run: |
+          echo "SageMaker pipeline failed. Check the AWS console for execution details."
+          echo "Pipeline: VitalStreamECGTrainingPipeline"
+          echo "Commit: ${{ github.sha }}"

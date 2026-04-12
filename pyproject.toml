@@ -1,0 +1,51 @@
+[tool.ruff]
+target-version = "py312"
+line-length     = 100
+src             = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "UP",  # pyupgrade
+    "S",   # flake8-bandit (security)
+    "N",   # pep8-naming
+]
+ignore = [
+    "S101",  # allow assert in tests
+    "S603",  # subprocess call — used in training scripts only
+    "N803",  # argument name should be lowercase — numpy convention allows X, y
+    "N806",  # variable in function should be lowercase — numpy convention
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "S105", "S106"]  # allow assert and hardcoded test credentials
+
+[tool.mypy]
+python_version          = "3.12"
+strict                  = true
+ignore_missing_imports  = true
+exclude                 = ["tests/", "scripts/"]
+
+[tool.pytest.ini_options]
+testpaths   = ["tests"]
+addopts     = "-v --tb=short"
+filterwarnings = [
+    "ignore::DeprecationWarning:moto",
+    "ignore::DeprecationWarning:botocore",
+]
+
+[tool.coverage.run]
+source   = ["src"]
+omit     = ["src/models/*/train.py", "src/models/*/evaluate.py"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.:",
+    "raise NotImplementedError",
+]

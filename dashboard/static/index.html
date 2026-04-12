@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>VitalStream — Clinical Monitoring</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+  <style>
+    :root {
+      --bg:         #0a0e17;
+      --surface:    #111827;
+      --surface2:   #1a2235;
+      --border:     #1f2d45;
+      --text:       #e2e8f0;
+      --muted:      #64748b;
+      --green:      #10b981;
+      --yellow:     #f59e0b;
+      --red:        #ef4444;
+      --blue:       #3b82f6;
+      --cyan:       #06b6d4;
+      --ecg-line:   #00ff88;
+      --pulse:      rgba(239,68,68,0.15);
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* ── Header ─────────────────────────────────────────────── */
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 24px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 1.1rem;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      color: var(--cyan);
+    }
+
+    .logo-dot {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      background: var(--green);
+      box-shadow: 0 0 8px var(--green);
+      animation: pulse-dot 2s infinite;
+    }
+
+    @keyframes pulse-dot {
+      0%,100% { opacity: 1; transform: scale(1); }
+      50%      { opacity: 0.5; transform: scale(1.3); }
+    }
+
+    .header-meta {
+      display: flex;
+      gap: 24px;
+      font-size: 0.75rem;
+      color: var(--muted);
+    }
+
+    .header-meta span { display: flex; align-items: center; gap: 6px; }
+    .header-meta .val { color: var(--text); font-weight: 600; }
+
+    .status-pill {
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 0.7rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    .status-live { background: rgba(16,185,129,0.15); color: var(--green); border: 1px solid rgba(16,185,129,0.3); }
+
+    /* ── Alert Banner ─────────────────────────────────────────── */
+    #alert-banner {
+      display: none;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 24px;
+      background: rgba(239,68,68,0.1);
+      border-bottom: 1px solid rgba(239,68,68,0.3);
+      font-size: 0.8rem;
+      color: var(--red);
+      animation: flash-bg 1s infinite;
+    }
+
+    #alert-banner.active { display: flex; }
+
+    @keyframes flash-bg {
+      0%,100% { background: rgba(239,68,68,0.10); }
+      50%      { background: rgba(239,68,68,0.20); }
+    }
+
+    .alert-icon { font-size: 1rem; animation: blink 0.8s infinite; }
+    @keyframes blink { 0%,100% { opacity:1; } 50% { opacity:0; } }
+
+    /* ── Main grid ───────────────────────────────────────────── */
+    main {
+      padding: 20px 24px;
+      display: grid;
+      gap: 16px;
+    }
+
+    /* ── Patient cards ───────────────────────────────────────── */
+    .patients-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(740px, 1fr));
+      gap: 16px;
+    }
+
+    .patient-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      transition: border-color 0.3s;
+    }
+
+    .patient-card.alert {
+      border-color: var(--red);
+      box-shadow: 0 0 20px rgba(239,68,68,0.15);
+    }
+
+    .patient-card.warning {
+      border-color: var(--yellow);
+      box-shadow: 0 0 12px rgba(245,158,11,0.1);
+    }
+
+    /* Card header */
+    .card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 16px;
+      background: var(--surface2);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .patient-info { display: flex; flex-direction: column; gap: 2px; }
+    .patient-name { font-size: 0.95rem; font-weight: 700; color: var(--text); }
+    .patient-meta { font-size: 0.7rem; color: var(--muted); }
+
+    .card-badges { display: flex; gap: 8px; align-items: center; }
+
+    .badge {
+      padding: 3px 10px;
+      border-radius: 6px;
+      font-size: 0.68rem;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    .badge-normal  { background: rgba(16,185,129,0.1);  color: var(--green);  border: 1px solid rgba(16,185,129,0.3); }
+    .badge-afib    { background: rgba(245,158,11,0.1);  color: var(--yellow); border: 1px solid rgba(245,158,11,0.3); }
+    .badge-vt      { background: rgba(239,68,68,0.15);  color: var(--red);    border: 1px solid rgba(239,68,68,0.4);  animation: flash-bg 0.6s infinite; }
+    .badge-noise   { background: rgba(100,116,139,0.1); color: var(--muted);  border: 1px solid rgba(100,116,139,0.3); }
+    .badge-stemi   { background: rgba(239,68,68,0.15);  color: var(--red);    border: 1px solid rgba(239,68,68,0.4); }
+
+    /* Score bar */
+    .score-wrap { display: flex; align-items: center; gap: 8px; min-width: 140px; }
+    .score-label { font-size: 0.65rem; color: var(--muted); white-space: nowrap; }
+    .score-bar-bg {
+      flex: 1; height: 4px;
+      background: var(--border);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+    .score-bar-fill {
+      height: 100%;
+      border-radius: 2px;
+      transition: width 0.4s ease, background 0.4s;
+    }
+    .score-val { font-size: 0.7rem; font-weight: 700; min-width: 32px; text-align: right; }
+
+    /* Card body */
+    .card-body {
+      display: grid;
+      grid-template-columns: 1fr 180px;
+      gap: 0;
+    }
+
+    /* ECG canvas */
+    .ecg-wrap {
+      padding: 12px 16px 12px 12px;
+      position: relative;
+      border-right: 1px solid var(--border);
+    }
+
+    .ecg-label {
+      position: absolute;
+      top: 8px; left: 12px;
+      font-size: 0.62rem;
+      color: var(--muted);
+      letter-spacing: 0.06em;
+    }
+
+    .ecg-canvas {
+      width: 100%;
+      height: 100px;
+      display: block;
+    }
+
+    /* Vitals panel */
+    .vitals-panel {
+      padding: 12px 16px;
+      display: grid;
+      grid-template-rows: repeat(5, 1fr);
+      gap: 4px;
+    }
+
+    .vital-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 4px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .vital-row:last-child { border-bottom: none; }
+
+    .vital-name { font-size: 0.68rem; color: var(--muted); }
+
+    .vital-val {
+      font-size: 0.9rem;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+    }
+    .vital-unit { font-size: 0.6rem; color: var(--muted); margin-left: 3px; }
+
+    .vital-val.danger { color: var(--red); }
+    .vital-val.warn   { color: var(--yellow); }
+    .vital-val.ok     { color: var(--green); }
+
+    /* ── Bottom stats bar ──────────────────────────────────── */
+    .stats-bar {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+      margin-top: 4px;
+    }
+
+    .stat-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .stat-title { font-size: 0.68rem; color: var(--muted); letter-spacing: 0.06em; text-transform: uppercase; }
+    .stat-value { font-size: 1.5rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+    .stat-sub   { font-size: 0.68rem; color: var(--muted); }
+    .stat-green { color: var(--green); }
+    .stat-red   { color: var(--red); }
+    .stat-yellow{ color: var(--yellow); }
+    .stat-blue  { color: var(--blue); }
+
+    /* ── Inference log ─────────────────────────────────────── */
+    .log-panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+
+    .log-header {
+      padding: 10px 16px;
+      background: var(--surface2);
+      border-bottom: 1px solid var(--border);
+      font-size: 0.72rem;
+      color: var(--muted);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .log-body {
+      height: 180px;
+      overflow-y: auto;
+      padding: 8px 0;
+      font-size: 0.72rem;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+    }
+
+    .log-body::-webkit-scrollbar { width: 4px; }
+    .log-body::-webkit-scrollbar-track { background: transparent; }
+    .log-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    .log-row {
+      display: grid;
+      grid-template-columns: 90px 80px 90px 70px 1fr;
+      gap: 8px;
+      padding: 4px 16px;
+      transition: background 0.2s;
+    }
+    .log-row:hover { background: var(--surface2); }
+    .log-row.log-alert { background: rgba(239,68,68,0.05); }
+
+    .log-ts   { color: var(--muted); }
+    .log-pt   { color: var(--cyan); }
+    .log-cls  { font-weight: 700; }
+    .log-cls.NORMAL { color: var(--green); }
+    .log-cls.AFIB   { color: var(--yellow); }
+    .log-cls.VT     { color: var(--red); }
+    .log-cls.NOISE  { color: var(--muted); }
+    .log-score { color: var(--text); font-variant-numeric: tabular-nums; }
+    .log-model { color: var(--muted); }
+  </style>
+</head>
+<body>
+
+<!-- Header -->
+<header>
+  <div class="logo">
+    <div class="logo-dot"></div>
+    VITALSTREAM
+  </div>
+  <div class="header-meta">
+    <span>FACILITY <span class="val">Memorial General — ICU / CCU</span></span>
+    <span>PATIENTS <span class="val" id="hdr-patients">4</span></span>
+    <span>ALERTS <span class="val" id="hdr-alerts" style="color:var(--green)">0</span></span>
+    <span>LATENCY <span class="val" id="hdr-latency">—</span> ms</span>
+    <span id="hdr-clock" class="val"></span>
+  </div>
+  <div class="status-pill status-live">● LIVE</div>
+</header>
+
+<!-- Alert Banner -->
+<div id="alert-banner">
+  <span class="alert-icon">⚠</span>
+  <span id="alert-text">ANOMALY DETECTED</span>
+</div>
+
+<main>
+  <!-- Patient cards -->
+  <div class="patients-grid" id="patients-grid"></div>
+
+  <!-- Stats bar -->
+  <div class="stats-bar">
+    <div class="stat-card">
+      <div class="stat-title">Total Inferences</div>
+      <div class="stat-value stat-blue" id="stat-inferences">0</div>
+      <div class="stat-sub">since session start</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-title">Active Alerts</div>
+      <div class="stat-value stat-red" id="stat-alerts">0</div>
+      <div class="stat-sub">anomaly score ≥ 0.85</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-title">Avg Anomaly Score</div>
+      <div class="stat-value stat-yellow" id="stat-avg-score">0.00</div>
+      <div class="stat-sub">rolling 60-window mean</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-title">Model Version</div>
+      <div class="stat-value stat-green" style="font-size:1.1rem">v1.1.0</div>
+      <div class="stat-sub">1D-CNN + BiLSTM · ECG_LEAD_II</div>
+    </div>
+  </div>
+
+  <!-- Inference log -->
+  <div class="log-panel">
+    <div class="log-header">
+      <span>Inference Log</span>
+      <span id="log-count" style="color:var(--green)">0 events</span>
+    </div>
+    <div class="log-body" id="log-body">
+      <div class="log-row" style="color:var(--muted); font-style:italic; grid-template-columns:1fr">
+        <span style="padding:4px 0">Waiting for stream…</span>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script>
+// ── State ─────────────────────────────────────────────────────
+const ECG_HISTORY   = 1000;   // samples kept in rolling buffer per patient
+const MAX_LOG_ROWS  = 120;
+
+const state = {
+  buffers:    {},   // patient_id → Float32Array rolling buffer
+  charts:     {},   // patient_id → Chart.js instance
+  canvases:   {},   // patient_id → canvas element
+  totalInferences: 0,
+  alertCount:      0,
+  scoreHistory:    [],
+  logRows:         0,
+};
+
+// ── Clock ──────────────────────────────────────────────────────
+function updateClock() {
+  document.getElementById('hdr-clock').textContent =
+    new Date().toLocaleTimeString('en-US', { hour12: false });
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+// ── Build patient cards ──────────────────────────────────────
+function buildCards(patients) {
+  const grid = document.getElementById('patients-grid');
+  grid.innerHTML = '';
+  patients.forEach(p => {
+    state.buffers[p.patient_id]  = new Float32Array(ECG_HISTORY).fill(0);
+
+    const card = document.createElement('div');
+    card.className = 'patient-card';
+    card.id = `card-${p.patient_id}`;
+    card.innerHTML = `
+      <div class="card-header">
+        <div class="patient-info">
+          <div class="patient-name">${p.name}</div>
+          <div class="patient-meta">${p.room} · ${p.condition}</div>
+        </div>
+        <div class="card-badges">
+          <div class="score-wrap">
+            <span class="score-label">ANOMALY</span>
+            <div class="score-bar-bg"><div class="score-bar-fill" id="bar-${p.patient_id}" style="width:0%;background:var(--green)"></div></div>
+            <span class="score-val" id="score-val-${p.patient_id}">0.00</span>
+          </div>
+          <div class="badge badge-normal" id="badge-${p.patient_id}">NORMAL</div>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="ecg-wrap">
+          <span class="ecg-label">ECG · LEAD II · 500 Hz</span>
+          <canvas class="ecg-canvas" id="ecg-${p.patient_id}"></canvas>
+        </div>
+        <div class="vitals-panel" id="vitals-${p.patient_id}">
+          ${['HR','SpO₂','SYS/DIA','TEMP'].map(v =>
+            `<div class="vital-row">
+               <span class="vital-name">${v}</span>
+               <span><span class="vital-val ok" id="vital-${p.patient_id}-${v.replace(/[^a-z0-9]/gi,'')}">—</span></span>
+             </div>`
+          ).join('')}
+          <div class="vital-row">
+            <span class="vital-name">CONF</span>
+            <span><span class="vital-val ok" id="vital-${p.patient_id}-CONF">—</span></span>
+          </div>
+        </div>
+      </div>`;
+    grid.appendChild(card);
+    buildChart(p.patient_id);
+  });
+}
+
+function buildChart(pid) {
+  const canvas = document.getElementById(`ecg-${pid}`);
+  state.canvases[pid] = canvas;
+
+  const labels = Array.from({length: ECG_HISTORY}, (_, i) => i);
+  state.charts[pid] = new Chart(canvas, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        data: Array(ECG_HISTORY).fill(0),
+        borderColor: 'var(--ecg-line)',
+        borderWidth: 1.5,
+        pointRadius: 0,
+        tension: 0.1,
+        fill: false,
+      }]
+    },
+    options: {
+      animation: false,
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { enabled: false } },
+      scales: {
+        x: { display: false },
+        y: {
+          display: false,
+          min: -400,
+          max: 1200,
+        }
+      },
+      elements: { line: { capBezierPoints: false } }
+    }
+  });
+}
+
+// ── Update a single patient card ─────────────────────────────
+function updateCard(frame) {
+  const pid  = frame.patient_id;
+  const anom = frame.anomaly;
+  const vit  = frame.vitals;
+
+  // Rolling ECG buffer
+  const buf     = state.buffers[pid];
+  const samples = frame.ecg_samples;
+  buf.copyWithin(0, samples.length);
+  buf.set(samples.slice(-ECG_HISTORY), ECG_HISTORY - Math.min(samples.length, ECG_HISTORY));
+
+  const chart = state.charts[pid];
+  chart.data.datasets[0].data = Array.from(buf);
+
+  // Colour ECG line by anomaly label
+  const ecgColor = {
+    NORMAL: '#00ff88',
+    AFIB:   '#f59e0b',
+    VT:     '#ef4444',
+    NOISE:  '#64748b',
+    STEMI:  '#ef4444',
+  }[anom.label] || '#00ff88';
+  chart.data.datasets[0].borderColor = ecgColor;
+  chart.update('none');
+
+  // Card border
+  const card = document.getElementById(`card-${pid}`);
+  card.className = 'patient-card' + (anom.is_alert ? ' alert' : anom.score > 0.5 ? ' warning' : '');
+
+  // Badge
+  const badge = document.getElementById(`badge-${pid}`);
+  badge.className = `badge badge-${anom.label.toLowerCase()}`;
+  badge.textContent = anom.label;
+
+  // Score bar
+  const pct  = Math.round(anom.score * 100);
+  const barColor = anom.score >= 0.85 ? '#ef4444' : anom.score >= 0.5 ? '#f59e0b' : '#10b981';
+  document.getElementById(`bar-${pid}`).style.width   = pct + '%';
+  document.getElementById(`bar-${pid}`).style.background = barColor;
+  const sv = document.getElementById(`score-val-${pid}`);
+  sv.textContent = anom.score.toFixed(3);
+  sv.style.color = barColor;
+
+  // Vitals
+  const hrEl   = document.getElementById(`vital-${pid}-HR`);
+  hrEl.textContent = vit.hr;
+  hrEl.className   = `vital-val ${vit.hr > 120 || vit.hr < 45 ? 'danger' : vit.hr > 100 ? 'warn' : 'ok'}`;
+
+  const spo2El = document.getElementById(`vital-${pid}-SpO`);
+  if (spo2El) {
+    spo2El.textContent = vit.spo2 + '%';
+    spo2El.className   = `vital-val ${vit.spo2 < 92 ? 'danger' : vit.spo2 < 95 ? 'warn' : 'ok'}`;
+  }
+
+  const bpEl   = document.getElementById(`vital-${pid}-SYSDIA`);
+  if (bpEl) {
+    bpEl.textContent = `${vit.sys_bp}/${vit.dia_bp}`;
+    bpEl.className   = `vital-val ${vit.sys_bp > 160 || vit.sys_bp < 90 ? 'danger' : 'ok'}`;
+  }
+
+  const tEl    = document.getElementById(`vital-${pid}-TEMP`);
+  if (tEl) {
+    tEl.textContent = vit.temp + '°C';
+    tEl.className   = `vital-val ${vit.temp > 38.5 ? 'warn' : 'ok'}`;
+  }
+
+  const confEl = document.getElementById(`vital-${pid}-CONF`);
+  if (confEl) {
+    confEl.textContent = (anom.confidence * 100).toFixed(1) + '%';
+    confEl.className   = 'vital-val ok';
+  }
+}
+
+// ── Alert banner ─────────────────────────────────────────────
+let alertTimeout = null;
+function triggerAlert(frames) {
+  const alerting = frames.filter(f => f.anomaly.is_alert);
+  const banner   = document.getElementById('alert-banner');
+  if (alerting.length > 0) {
+    const msg = alerting.map(f =>
+      `${f.name} (${f.room}) — ${f.anomaly.label} · score ${f.anomaly.score.toFixed(3)}`
+    ).join('  |  ');
+    document.getElementById('alert-text').textContent = '⚠ ' + msg;
+    banner.classList.add('active');
+    clearTimeout(alertTimeout);
+    alertTimeout = setTimeout(() => banner.classList.remove('active'), 4000);
+  }
+}
+
+// ── Inference log ─────────────────────────────────────────────
+const LOG_TS_FMT = new Intl.DateTimeFormat('en-US', {
+  hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+});
+
+function appendLog(frames) {
+  const body = document.getElementById('log-body');
+  const alertFrames = frames.filter(f => f.anomaly.label !== 'NORMAL' || f.anomaly.score > 0.2);
+  if (alertFrames.length === 0) return;
+
+  const ts = LOG_TS_FMT.format(new Date());
+
+  alertFrames.forEach(f => {
+    const row = document.createElement('div');
+    row.className = 'log-row' + (f.anomaly.is_alert ? ' log-alert' : '');
+    row.innerHTML = `
+      <span class="log-ts">${ts}</span>
+      <span class="log-pt">${f.patient_id.slice(-6)}</span>
+      <span class="log-cls ${f.anomaly.label}">${f.anomaly.label}</span>
+      <span class="log-score">${f.anomaly.score.toFixed(4)}</span>
+      <span class="log-model">1D-CNN+LSTM · v1.1.0 · ${f.vitals.hr.toFixed(0)} bpm</span>`;
+    body.appendChild(row);
+    state.logRows++;
+
+    if (state.logRows > MAX_LOG_ROWS) {
+      body.removeChild(body.firstElementChild);
+    }
+  });
+
+  body.scrollTop = body.scrollHeight;
+  document.getElementById('log-count').textContent = state.logRows + ' events';
+}
+
+// ── Stats bar ────────────────────────────────────────────────
+const SCORE_WINDOW = 60;
+function updateStats(frames) {
+  state.totalInferences += frames.length;
+  state.alertCount = frames.filter(f => f.anomaly.is_alert).length;
+
+  frames.forEach(f => {
+    state.scoreHistory.push(f.anomaly.score);
+    if (state.scoreHistory.length > SCORE_WINDOW * frames.length)
+      state.scoreHistory.shift();
+  });
+
+  const avg = state.scoreHistory.reduce((a, b) => a + b, 0) / (state.scoreHistory.length || 1);
+
+  document.getElementById('stat-inferences').textContent = state.totalInferences;
+  document.getElementById('stat-alerts').textContent     = state.alertCount;
+  document.getElementById('stat-avg-score').textContent  = avg.toFixed(3);
+  document.getElementById('hdr-alerts').textContent      = state.alertCount;
+  document.getElementById('hdr-alerts').style.color      = state.alertCount > 0 ? 'var(--red)' : 'var(--green)';
+}
+
+// ── WebSocket ────────────────────────────────────────────────
+let ws;
+let cardsBuilt = false;
+let frameCount = 0;
+let lastTs     = performance.now();
+
+function connect() {
+  ws = new WebSocket(`ws://${location.host}/ws`);
+
+  ws.onmessage = (evt) => {
+    const now    = performance.now();
+    const frames = JSON.parse(evt.data);
+
+    if (!cardsBuilt) {
+      buildCards(frames);
+      cardsBuilt = true;
+    }
+
+    frames.forEach(updateCard);
+    triggerAlert(frames);
+    appendLog(frames);
+    updateStats(frames);
+
+    // Latency estimate (round-trip server → client)
+    frameCount++;
+    if (frameCount % 10 === 0) {
+      const latency = Math.round(performance.now() - lastTs);
+      document.getElementById('hdr-latency').textContent = latency;
+    }
+    lastTs = now;
+
+    // Keep-alive
+    ws.send('ping');
+  };
+
+  ws.onclose = () => setTimeout(connect, 1500);
+  ws.onerror = () => ws.close();
+}
+
+connect();
+</script>
+</body>
+</html>

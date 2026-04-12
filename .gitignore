@@ -1,0 +1,66 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+env/
+.env
+
+# Environment / secrets — NEVER commit these
+.env.local
+.env.*.local
+secrets.auto.tfvars
+*.tfvars
+!terraform.tfvars.example
+
+# Terraform
+**/.terraform/
+*.tfstate
+*.tfstate.backup
+*.tfstate.lock.info
+.terraform.lock.hcl
+terraform.tfplan
+
+# pytest / coverage
+.pytest_cache/
+.coverage
+htmlcov/
+coverage.xml
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# macOS
+.DS_Store
+
+# Model artifacts (use S3/Model Registry instead)
+*.tar.gz
+*.pt
+*.pth
+*.pkl
+*.joblib
+model_artifacts/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# AWS SAM
+.aws-sam/
+
+# Logs
+*.log
+logs/
