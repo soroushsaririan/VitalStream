@@ -587,28 +587,109 @@ function updateStats(frames) {
   document.getElementById('hdr-alerts').style.color = state.alertCount > 0 ? 'var(--red)' : 'var(--green)';
 }
 
-let ws, cardsBuilt = false, frameCount = 0, lastTs = performance.now();
+// ── Demo mode ──────────────────────────────────────────────────────────
+const DEMO_PATIENTS = [
+  { patient_id: 'pt-001', name: 'Eleanor Voss',   room: 'ICU-4A', condition: 'Post-CABG' },
+  { patient_id: 'pt-002', name: 'Marcus Webb',    room: 'CCU-2B', condition: 'NSTEMI' },
+  { patient_id: 'pt-003', name: 'Diane Keller',   room: 'ICU-1C', condition: 'Septic shock' },
+  { patient_id: 'pt-004', name: 'Thomas Reyes',   room: 'CCU-3D', condition: 'HF exacerbation' },
+];
 
-function connect() {
-  ws = new WebSocket(`ws://${location.host}/ws`);
-  ws.onmessage = (evt) => {
-    const now = performance.now();
-    const frames = JSON.parse(evt.data);
-    if (!cardsBuilt) { buildCards(frames); cardsBuilt = true; }
-    frames.forEach(updateCard);
-    triggerAlert(frames);
-    appendLog(frames);
-    updateStats(frames);
-    frameCount++;
-    if (frameCount % 10 === 0)
-      document.getElementById('hdr-latency').textContent = Math.round(performance.now() - lastTs);
-    lastTs = now;
-    ws.send('ping');
-  };
-  ws.onclose = () => setTimeout(connect, 1500);
-  ws.onerror = () => ws.close();
+const DEMO_STATES = [
+  { label: 'NORMAL', score: 0.08, is_alert: false, confidence: 0.97 },
+  { label: 'NORMAL', score: 0.14, is_alert: false, confidence: 0.94 },
+  { label: 'AFIB',   score: 0.72, is_alert: false, confidence: 0.88 },
+  { label: 'AFIB',   score: 0.81, is_alert: false, confidence: 0.85 },
+  { label: 'VT',     score: 0.93, is_alert: true,  confidence: 0.91 },
+  { label: 'NORMAL', score: 0.11, is_alert: false, confidence: 0.96 },
+  { label: 'STEMI',  score: 0.96, is_alert: true,  confidence: 0.93 },
+  { label: 'NOISE',  score: 0.22, is_alert: false, confidence: 0.60 },
+];
+
+const patientStateIdx = {};
+DEMO_PATIENTS.forEach((p, i) => { patientStateIdx[p.patient_id] = i % DEMO_STATES.length; });
+
+const ecgPhase = {};
+DEMO_PATIENTS.forEach(p => { ecgPhase[p.patient_id] = Math.random() * Math.PI * 2; });
+
+function ecgSample(pid, t, label) {
+  const f  = label === 'AFIB' ? 1.8 + 0.4 * Math.sin(t * 0.05) : 1.3;
+  const ph = ecgPhase[pid];
+  const cycle = ((t * f * 0.12) + ph) % (2 * Math.PI);
+  const n = cycle / (2 * Math.PI);
+
+  // P wave
+  const p_wave = 60 * Math.exp(-Math.pow((n - 0.1) / 0.03, 2));
+  // QRS
+  const q = -50 * Math.exp(-Math.pow((n - 0.22) / 0.01, 2));
+  const r = label === 'STEMI'
+    ? 1100 * Math.exp(-Math.pow((n - 0.24) / 0.008, 2))
+    :  900 * Math.exp(-Math.pow((n - 0.24) / 0.008, 2));
+  const s = -100 * Math.exp(-Math.pow((n - 0.27) / 0.01, 2));
+  // ST elevation for STEMI
+  const st = label === 'STEMI' ? 180 * Math.exp(-Math.pow((n - 0.31) / 0.04, 2)) : 0;
+  // T wave
+  const t_wave = label === 'VT'
+    ? -120 * Math.exp(-Math.pow((n - 0.38) / 0.04, 2))
+    :   80 * Math.exp(-Math.pow((n - 0.38) / 0.04, 2));
+  // Noise for AFIB
+  const noise = label === 'AFIB' ? (Math.random() - 0.5) * 40 : (Math.random() - 0.5) * 8;
+
+  return p_wave + q + r + s + st + t_wave + noise;
 }
-connect();
+
+function makeFrame(p, tick) {
+  const sid = patientStateIdx[p.patient_id];
+  const anom = DEMO_STATES[sid];
+
+  // slowly cycle state
+  if (tick % 120 === 0 && Math.random() < 0.3) {
+    patientStateIdx[p.patient_id] = Math.floor(Math.random() * DEMO_STATES.length);
+  }
+
+  const hr   = anom.label === 'VT' ? 178 + Math.round(Math.random() * 10)
+             : anom.label === 'AFIB' ? 102 + Math.round(Math.random() * 20)
+             : 64 + Math.round(Math.random() * 14);
+  const spo2 = anom.label === 'VT' ? 88 + Math.round(Math.random() * 3)
+             : 96 + Math.round(Math.random() * 3);
+  const sysBP = anom.label === 'VT' ? 82 + Math.round(Math.random() * 10)
+              : anom.label === 'STEMI' ? 168 + Math.round(Math.random() * 10)
+              : 118 + Math.round(Math.random() * 20);
+  const diaBP = Math.round(sysBP * 0.6) + Math.round(Math.random() * 6);
+  const temp  = 36.8 + (Math.random() - 0.3) * 1.2;
+
+  const samples = Array.from({length: 20}, (_, i) => ecgSample(p.patient_id, tick * 20 + i, anom.label));
+
+  return {
+    patient_id: p.patient_id,
+    name: p.name,
+    room: p.room,
+    condition: p.condition,
+    anomaly: { ...anom, score: anom.score + (Math.random() - 0.5) * 0.05 },
+    vitals: { hr, spo2, sys_bp: sysBP, dia_bp: diaBP, temp: +temp.toFixed(1) },
+    ecg_samples: samples,
+  };
+}
+
+let cardsBuilt = false, frameCount = 0, lastTs = performance.now(), tick = 0;
+
+function demoTick() {
+  const frames = DEMO_PATIENTS.map(p => makeFrame(p, tick++));
+  if (!cardsBuilt) { buildCards(frames); cardsBuilt = true; }
+  frames.forEach(updateCard);
+  triggerAlert(frames);
+  appendLog(frames);
+  updateStats(frames);
+  frameCount++;
+  if (frameCount % 10 === 0) {
+    const now = performance.now();
+    document.getElementById('hdr-latency').textContent = Math.round(now - lastTs);
+    lastTs = now;
+  }
+}
+
+setInterval(demoTick, 200);
+demoTick();
 </script>
 </body>
 </html>
