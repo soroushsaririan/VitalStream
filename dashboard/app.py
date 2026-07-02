@@ -184,25 +184,30 @@ class PatientStream:
         inject_afib = self._phase == 1 and self.patient["id"] in ("pt-002", "pt-001")
         inject_vt   = self._phase == 1 and self.patient["id"] == "pt-003"
 
+        # Baseline vitals wander slowly around admission values
+        self.hr      = max(48, min(110, self.hr      + random.uniform(-0.4, 0.4)))
+        self.spo2    = max(88, min(100, self.spo2    + random.uniform(-0.1, 0.1)))
+        self.sys_bp  = max(92, min(165, self.sys_bp  + random.uniform(-0.8, 0.8)))
+        self.dia_bp  = max(55, min(100, self.dia_bp  + random.uniform(-0.5, 0.5)))
+
+        # Episode physiology is a transient offset on the baseline, not an
+        # integrated drift (at 20 frames/s integration runs away in seconds)
+        hr_out, spo2_out, sys_out = self.hr, self.spo2, self.sys_bp
+        if inject_vt:
+            hr_out   = 165 + random.uniform(-4, 10)
+            spo2_out = max(85, self.spo2 - 6 + random.uniform(-1, 1))
+            sys_out  = max(78, self.sys_bp - 32 + random.uniform(-4, 4))
+        elif inject_afib:
+            hr_out = min(150, self.hr + 32 + random.uniform(-10, 14))
+        dia_out = min(self.dia_bp, sys_out - 12)
+
         ecg = _ecg_window(
             WINDOW_SAMPLES, FS,
-            hr=self.hr + random.uniform(-2, 2),
+            hr=hr_out + random.uniform(-2, 2),
             inject_afib=inject_afib,
             inject_vt=inject_vt,
         )
         score = score_window(ecg, inject_afib, inject_vt)
-
-        # Drift vitals slightly
-        self.hr      = max(40, min(160, self.hr      + random.uniform(-0.5, 0.5)))
-        self.spo2    = max(85, min(100, self.spo2    + random.uniform(-0.1, 0.1)))
-        self.sys_bp  = max(80, min(190, self.sys_bp  + random.uniform(-0.8, 0.8)))
-        self.dia_bp  = max(50, min(120, self.dia_bp  + random.uniform(-0.5, 0.5)))
-
-        if inject_vt:
-            self.hr     = min(180, self.hr + 2)
-            self.sys_bp = max(60, self.sys_bp - 1)
-        if inject_afib:
-            self.hr += random.uniform(-3, 6)
 
         return {
             "patient_id":   self.patient["id"],
@@ -212,10 +217,10 @@ class PatientStream:
             "timestamp_ms": int(time.time() * 1000),
             "ecg_samples":  ecg.tolist(),
             "vitals": {
-                "hr":     round(self.hr, 1),
-                "spo2":   round(self.spo2, 1),
-                "sys_bp": round(self.sys_bp, 0),
-                "dia_bp": round(self.dia_bp, 0),
+                "hr":     round(hr_out, 1),
+                "spo2":   round(spo2_out, 1),
+                "sys_bp": round(sys_out, 0),
+                "dia_bp": round(dia_out, 0),
                 "temp":   round(self.temp + random.uniform(-0.05, 0.05), 1),
             },
             "anomaly": {

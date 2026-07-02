@@ -1,0 +1,69 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1170 400" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arr" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0 0 L8 4 L0 8 z" fill="#333"/>
+    </marker>
+  </defs>
+  <style>
+    .box { fill: #fff; stroke: #333; stroke-width: 1; }
+    .t   { font-size: 12px; font-weight: bold; fill: #111; }
+    .s   { font-size: 10px; fill: #666; }
+    .ln  { stroke: #333; stroke-width: 1; fill: none; }
+  </style>
+
+  <rect x="0" y="0" width="1170" height="400" fill="#ffffff"/>
+
+  <text x="40" y="45" font-size="15" font-weight="bold" fill="#111">VitalStream — architecture</text>
+
+  <!-- main flow -->
+  <g text-anchor="middle">
+    <rect class="box" x="40" y="100" width="130" height="60"/>
+    <text class="t" x="105" y="126">Sensors</text>
+    <text class="s" x="105" y="142">ECG / sEMG · MQTT</text>
+
+    <rect class="box" x="200" y="100" width="130" height="60"/>
+    <text class="t" x="265" y="126">AWS IoT Core</text>
+    <text class="s" x="265" y="142">rules engine</text>
+
+    <rect class="box" x="360" y="100" width="130" height="60"/>
+    <text class="t" x="425" y="126">Kinesis</text>
+    <text class="s" x="425" y="142">keyed by patient_id</text>
+
+    <rect class="box" x="520" y="100" width="130" height="60"/>
+    <text class="t" x="585" y="126">Lambda</text>
+    <text class="s" x="585" y="142">filtering + features</text>
+
+    <rect class="box" x="680" y="100" width="130" height="60"/>
+    <text class="t" x="745" y="126">SageMaker</text>
+    <text class="s" x="745" y="142">1D-CNN + BiLSTM</text>
+
+    <rect class="box" x="840" y="100" width="130" height="60"/>
+    <text class="t" x="905" y="126">DynamoDB</text>
+    <text class="s" x="905" y="142">patient state</text>
+
+    <rect class="box" x="1000" y="100" width="130" height="60"/>
+    <text class="t" x="1065" y="126">SNS alerts</text>
+    <text class="s" x="1065" y="142">PagerDuty / dashboard</text>
+  </g>
+
+  <line class="ln" x1="170" y1="130" x2="194" y2="130" marker-end="url(#arr)"/>
+  <line class="ln" x1="330" y1="130" x2="354" y2="130" marker-end="url(#arr)"/>
+  <line class="ln" x1="490" y1="130" x2="514" y2="130" marker-end="url(#arr)"/>
+  <line class="ln" x1="650" y1="130" x2="674" y2="130" marker-end="url(#arr)"/>
+  <line class="ln" x1="810" y1="130" x2="834" y2="130" marker-end="url(#arr)"/>
+  <line class="ln" x1="970" y1="130" x2="994" y2="130" marker-end="url(#arr)"/>
+
+  <!-- analytics branch -->
+  <g text-anchor="middle">
+    <rect class="box" x="520" y="250" width="130" height="60"/>
+    <text class="t" x="585" y="276">Flink</text>
+    <text class="s" x="585" y="292">60 s aggregates</text>
+
+    <rect class="box" x="680" y="250" width="130" height="60"/>
+    <text class="t" x="745" y="276">S3</text>
+    <text class="s" x="745" y="292">data lake · 7 yr retention</text>
+  </g>
+
+  <polyline class="ln" points="425,160 425,280 514,280" marker-end="url(#arr)"/>
+  <line class="ln" x1="650" y1="280" x2="674" y2="280" marker-end="url(#arr)"/>
+</svg>
